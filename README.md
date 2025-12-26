@@ -1,61 +1,84 @@
-# Welcome to React Router!
+# Audiobooks Frontend
 
-A modern, production-ready template for building full-stack React applications using React Router.
+A web application for managing and consuming audiobook content. This application provides a user interface for uploading documents, generating audio summaries, and managing an audiobook library.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+## Technical Stack
+
+- React Router for application routing and server-side rendering
+- TypeScript for type safety and improved developer experience
+- Bun as the JavaScript runtime and package manager
+- CSS for styling and visual design
 
 ## Features
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- Document upload supporting multiple formats (PDF, EPUB, TXT)
+- Audio summary generation and processing
+- Library management for audiobook content
+- Job status tracking for asynchronous operations
+- Responsive design for various screen sizes
 
-## Getting Started
+## Prerequisites
 
-### Installation
+- Bun installed on your system
+- Node.js (version 18 or higher recommended)
+- Access to the backend API service
 
-Install the dependencies:
+## Installation
 
-```bash
-npm install
-```
-
-### Development
-
-Start the development server with HMR:
+Install project dependencies:
 
 ```bash
-npm run dev
+bun install
 ```
 
-Your application will be available at `http://localhost:5173`.
+## Configuration
+
+Create a `.env.local` file in the project root with the following variables:
+
+```bash
+API_BASE_URL=http://localhost:8000
+```
+
+Adjust the API base URL according to your backend deployment.
+
+## Development
+
+Start the development server:
+
+```bash
+bun dev
+```
+
+The application will be available at `http://localhost:5173`.
 
 ## Building for Production
 
-Create a production build:
+Create an optimized production build:
 
 ```bash
-npm run build
+bun run build
+```
+
+The build output will be generated in the `build` directory:
+
+```
+├── build/
+│   ├── client/    # Static client assets
+│   └── server/    # Server-side rendering code
 ```
 
 ## Deployment
 
 ### Docker Deployment
 
-To build and run using Docker:
+Build and run the application using Docker:
 
 ```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
+docker build -t audiobooks-frontend .
+docker run -p 3000:3000 audiobooks-frontend
 ```
 
-The containerized application can be deployed to any platform that supports Docker, including:
+Supported deployment platforms:
 
 - AWS ECS
 - Google Cloud Run
@@ -64,24 +87,27 @@ The containerized application can be deployed to any platform that supports Dock
 - Fly.io
 - Railway
 
-### DIY Deployment
+### Manual Deployment
 
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
+For traditional Node.js hosting environments, deploy the contents of the `build` directory along with:
 
-Make sure to deploy the output of `npm run build`
+- `package.json`
+- `bun.lockb`
+
+Ensure the production environment has access to the required API endpoints.
+
+## Project Structure
 
 ```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
+├── app/                # Application source code
+│   ├── routes/        # Route components and logic
+│   ├── components/    # Reusable UI components
+│   ├── utils/         # Utility functions and API clients
+│   └── root.tsx       # Application root component
+├── public/            # Static assets
+└── build/             # Production build output
 ```
 
-## Styling
+## License
 
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+All rights reserved.
