@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
-import { fetchJobs, type Job } from "~/utils/api";
+import React, { useEffect, useState, useRef } from "react";
+import { fetchJobs, deleteJob, type Job } from "~/utils/api";
 import { Card } from "~/components/ui/Card";
+import { ConfirmModal } from "~/components/ui/ConfirmModal";
 
 import { useNodes } from "~/contexts/NodeContext";
 
@@ -8,6 +9,12 @@ export function JobDashboard() {
   const { nodes } = useNodes();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [playingJobId, setPlayingJobId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; job: Job | null }>({
+    isOpen: false,
+    job: null,
+  });
 
   const loadJobs = async () => {
     try {
@@ -18,7 +25,11 @@ export function JobDashboard() {
       }
       
       const results = await Promise.all(
-          onlineNodes.map(node => fetchJobs(node.url))
+          onlineNodes.map(async node => {
+            const nodeJobs = await fetchJobs(node.url);
+            // Tag each job with its source node URL
+            return nodeJobs.map(job => ({ ...job, nodeUrl: node.url }));
+          })
       );
       
       // Flatten and deduplicate by ID just in case
@@ -38,11 +49,98 @@ export function JobDashboard() {
     }
   };
 
+  const handlePlay = (job: Job) => {
+    if (!job.output_files || job.output_files.length === 0 || !job.nodeUrl) {
+      console.error("No audio files available");
+      return;
+    }
+
+    // Stop current audio if playing
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    if (playingJobId === job.id) {
+      // Toggle off
+      setPlayingJobId(null);
+      return;
+    }
+
+    // Build audio URL: nodeUrl + /audio/ + filename
+    // Handle both local paths (generated_audio/xxx.wav) and GCS URIs (gs://bucket/path/xxx.wav)
+    let audioPath = job.output_files[0];
+    
+    if (audioPath.startsWith("gs://")) {
+      // Extract filename from GCS URI: gs://bucket/audiobooks/jobid/filename.wav -> filename.wav
+      audioPath = audioPath.split("/").pop() || "";
+    } else {
+      // Remove generated_audio/ prefix from local path
+      audioPath = audioPath.replace("generated_audio/", "");
+    }
+    
+    const audioUrl = `${job.nodeUrl}/audio/${audioPath}`;
+    
+    const audio = new Audio(audioUrl);
+    audio.onended = () => setPlayingJobId(null);
+    audio.onerror = () => {
+      console.error("Error playing audio:", audioUrl);
+      setPlayingJobId(null);
+    };
+    audio.play();
+    audioRef.current = audio;
+    setPlayingJobId(job.id);
+  };
+
+  const handleDownload = (job: Job) => {
+    if (!job.output_files || job.output_files.length === 0 || !job.nodeUrl) return;
+    
+    // Handle both local paths and GCS URIs
+    let audioPath = job.output_files[0];
+    
+    if (audioPath.startsWith("gs://")) {
+      audioPath = audioPath.split("/").pop() || "";
+    } else {
+      audioPath = audioPath.replace("generated_audio/", "");
+    }
+    
+    const audioUrl = `${job.nodeUrl}/audio/${audioPath}`;
+    
+    const link = document.createElement("a");
+    link.href = audioUrl;
+    link.download = `${job.filename.replace(/\.[^.]+$/, "")}.wav`;
+    link.click();
+  };
+
+  const handleDelete = (job: Job) => {
+    if (!job.nodeUrl) return;
+    setDeleteModal({ isOpen: true, job });
+  };
+
+  const confirmDelete = async () => {
+    const job = deleteModal.job;
+    if (!job || !job.nodeUrl) return;
+    
+    try {
+      await deleteJob(job.nodeUrl, job.id);
+      // Remove from local state immediately
+      setJobs(prev => prev.filter(j => j.id !== job.id));
+    } catch (error) {
+      console.error("Error deleting job:", error);
+    } finally {
+      setDeleteModal({ isOpen: false, job: null });
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteModal({ isOpen: false, job: null });
+  };
+
   useEffect(() => {
     loadJobs();
     const interval = setInterval(loadJobs, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [nodes]);
 
   const getStatusColor = (status: Job["status"]) => {
     switch (status) {
@@ -99,7 +197,7 @@ export function JobDashboard() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                       <span>{job.message || `${job.progress}% processed`}</span>
-                      <span>{new Date(job.created_at).toLocaleTimeString()}</span>
+                      <span>{job.created_at ? new Date(job.created_at).toLocaleTimeString() : ""}</span>
                     </div>
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                       <div
@@ -114,16 +212,62 @@ export function JobDashboard() {
                 
                 {job.status === "completed" && (
                   <div className="flex items-center gap-2 md:pl-4 border-t md:border-t-0 md:border-l border-gray-100 dark:border-gray-800 pt-4 md:pt-0">
-                   <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition w-full md:w-auto justify-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Play
+                   <button 
+                    onClick={() => handlePlay(job)}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition w-full md:w-auto justify-center ${
+                      playingJobId === job.id 
+                        ? "bg-red-600 hover:bg-red-700" 
+                        : "bg-green-600 hover:bg-green-700"
+                    }`}
+                   >
+                    {playingJobId === job.id ? (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
+                        </svg>
+                        Stop
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Play
+                      </>
+                    )}
                    </button>
-                    <button className="p-2 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400">
+                    <button 
+                      onClick={() => handleDownload(job)}
+                      className="p-2 text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+                      title="Download audio"
+                    >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(job)}
+                      className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                      title="Delete"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+                
+                {job.status !== "completed" && (
+                  <div className="flex items-center gap-2 md:pl-4 border-t md:border-t-0 md:border-l border-gray-100 dark:border-gray-800 pt-4 md:pt-0">
+                    <button 
+                      onClick={() => handleDelete(job)}
+                      className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                      title="Delete"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </button>
                   </div>
@@ -133,6 +277,18 @@ export function JobDashboard() {
           ))}
         </div>
       )}
+      
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        title="Eliminar audiobook"
+        message={`¿Estás seguro de que deseas eliminar "${deleteModal.job?.filename}"? Esta acción no se puede deshacer.`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteModal({ isOpen: false, job: null })}
+      />
     </div>
   );
 }
