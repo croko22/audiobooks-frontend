@@ -41,8 +41,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+import { NodeProvider } from "~/contexts/NodeContext";
+import { Header } from "~/components/ui/Header";
+
 export default function App() {
-  return <Outlet />;
+  return (
+    <NodeProvider>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans selection:bg-indigo-500/30">
+        <Header />
+        <Outlet />
+      </div>
+    </NodeProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
