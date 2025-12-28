@@ -50,7 +50,7 @@ export function JobDashboard() {
   };
 
   const handlePlay = (job: Job) => {
-    if (!job.output_files || job.output_files.length === 0 || !job.nodeUrl) {
+    if (!job.output_files || job.output_files.length === 0) {
       console.error("No audio files available");
       return;
     }
@@ -67,19 +67,16 @@ export function JobDashboard() {
       return;
     }
 
-    // Build audio URL: nodeUrl + /audio/ + filename
-    // Handle both local paths (generated_audio/xxx.wav) and GCS URIs (gs://bucket/path/xxx.wav)
-    let audioPath = job.output_files[0];
+    // Fog Computing: Use GCS public URL directly (backend converts gs:// to https://)
+    // Fallback: if it's a local path, construct URL from nodeUrl
+    let audioUrl = job.output_files[0];
     
-    if (audioPath.startsWith("gs://")) {
-      // Extract filename from GCS URI: gs://bucket/audiobooks/jobid/filename.wav -> filename.wav
-      audioPath = audioPath.split("/").pop() || "";
-    } else {
-      // Remove generated_audio/ prefix from local path
-      audioPath = audioPath.replace("generated_audio/", "");
+    // If it's a local path (not a full URL), construct from nodeUrl
+    if (!audioUrl.startsWith("http") && !audioUrl.startsWith("gs://")) {
+      // Remove generated_audio/ prefix if present
+      const filename = audioUrl.replace("generated_audio/", "");
+      audioUrl = job.nodeUrl ? `${job.nodeUrl}/audio/${filename}` : audioUrl;
     }
-    
-    const audioUrl = `${job.nodeUrl}/audio/${audioPath}`;
     
     const audio = new Audio(audioUrl);
     audio.onended = () => setPlayingJobId(null);
@@ -93,18 +90,17 @@ export function JobDashboard() {
   };
 
   const handleDownload = (job: Job) => {
-    if (!job.output_files || job.output_files.length === 0 || !job.nodeUrl) return;
+    if (!job.output_files || job.output_files.length === 0) return;
     
-    // Handle both local paths and GCS URIs
-    let audioPath = job.output_files[0];
+    // Fog Computing: Use GCS public URL directly
+    // Fallback: if it's a local path, construct URL from nodeUrl
+    let audioUrl = job.output_files[0];
     
-    if (audioPath.startsWith("gs://")) {
-      audioPath = audioPath.split("/").pop() || "";
-    } else {
-      audioPath = audioPath.replace("generated_audio/", "");
+    // If it's a local path (not a full URL), construct from nodeUrl
+    if (!audioUrl.startsWith("http") && !audioUrl.startsWith("gs://")) {
+      const filename = audioUrl.replace("generated_audio/", "");
+      audioUrl = job.nodeUrl ? `${job.nodeUrl}/audio/${filename}` : audioUrl;
     }
-    
-    const audioUrl = `${job.nodeUrl}/audio/${audioPath}`;
     
     const link = document.createElement("a");
     link.href = audioUrl;
