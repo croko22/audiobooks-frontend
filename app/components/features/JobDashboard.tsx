@@ -1,16 +1,16 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { fetchJobs, deleteJob, type Job } from "~/utils/api";
 import { Card } from "~/components/ui/Card";
 import { ConfirmModal } from "~/components/ui/ConfirmModal";
+import { AudioPlayer } from "~/components/ui/AudioPlayer";
 
 import { useNodes } from "~/contexts/NodeContext";
 
 export function JobDashboard() {
-  const { nodes } = useNodes();
+  const { nodes, selectedNodeUrl } = useNodes();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
-  const [playingJobId, setPlayingJobId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingJob, setPlayingJob] = useState<Job | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; job: Job | null }>({
     isOpen: false,
     job: null,
@@ -18,9 +18,33 @@ export function JobDashboard() {
 
   const loadJobs = async () => {
     try {
+      // Si hay un fog node seleccionado, mostrar solo sus jobs
+      if (selectedNodeUrl) {
+        const selectedNode = nodes.find(n => n.url === selectedNodeUrl);
+        if (selectedNode && selectedNode.isOnline) {
+          const nodeJobs = await fetchJobs(selectedNode.url);
+          const jobsWithNodeUrl = nodeJobs.map(job => ({ ...job, nodeUrl: selectedNode.url }));
+          setJobs(
+            jobsWithNodeUrl.sort(
+              (a, b) =>
+                new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+            )
+          );
+          setLoading(false);
+          return;
+        } else {
+          // Si el nodo seleccionado no está online, mostrar vacío
+          setJobs([]);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Si no hay nodo seleccionado, mostrar jobs de todos los nodos online
       const onlineNodes = nodes.filter(n => n.isOnline);
       if (onlineNodes.length === 0) {
           setJobs([]);
+          setLoading(false);
           return;
       }
       
@@ -55,38 +79,14 @@ export function JobDashboard() {
       return;
     }
 
-    // Stop current audio if playing
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-
-    if (playingJobId === job.id) {
-      // Toggle off
-      setPlayingJobId(null);
+    // Si ya está reproduciendo este job, cerrar el reproductor
+    if (playingJob?.id === job.id) {
+      setPlayingJob(null);
       return;
     }
 
-    // Fog Computing: Use GCS public URL directly (backend converts gs:// to https://)
-    // Fallback: if it's a local path, construct URL from nodeUrl
-    let audioUrl = job.output_files[0];
-    
-    // If it's a local path (not a full URL), construct from nodeUrl
-    if (!audioUrl.startsWith("http") && !audioUrl.startsWith("gs://")) {
-      // Remove generated_audio/ prefix if present
-      const filename = audioUrl.replace("generated_audio/", "");
-      audioUrl = job.nodeUrl ? `${job.nodeUrl}/audio/${filename}` : audioUrl;
-    }
-    
-    const audio = new Audio(audioUrl);
-    audio.onended = () => setPlayingJobId(null);
-    audio.onerror = () => {
-      console.error("Error playing audio:", audioUrl);
-      setPlayingJobId(null);
-    };
-    audio.play();
-    audioRef.current = audio;
-    setPlayingJobId(job.id);
+    // Abrir el reproductor con este job
+    setPlayingJob(job);
   };
 
   const handleDownload = (job: Job) => {
@@ -136,7 +136,7 @@ export function JobDashboard() {
     loadJobs();
     const interval = setInterval(loadJobs, 2000);
     return () => clearInterval(interval);
-  }, [nodes]);
+  }, [nodes, selectedNodeUrl]);
 
   const getStatusColor = (status: Job["status"]) => {
     switch (status) {
@@ -211,18 +211,18 @@ export function JobDashboard() {
                    <button 
                     onClick={() => handlePlay(job)}
                     className={`flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition w-full md:w-auto justify-center ${
-                      playingJobId === job.id 
-                        ? "bg-red-600 hover:bg-red-700" 
+                      playingJob?.id === job.id 
+                        ? "bg-indigo-600 hover:bg-indigo-700" 
                         : "bg-green-600 hover:bg-green-700"
                     }`}
                    >
-                    {playingJobId === job.id ? (
+                    {playingJob?.id === job.id ? (
                       <>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
                         </svg>
-                        Stop
+                        Playing
                       </>
                     ) : (
                       <>
@@ -285,6 +285,14 @@ export function JobDashboard() {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteModal({ isOpen: false, job: null })}
       />
+
+      {/* Audio Player - Spotify Style */}
+      {playingJob && (
+        <AudioPlayer 
+          job={playingJob} 
+          onClose={() => setPlayingJob(null)} 
+        />
+      )}
     </div>
   );
 }

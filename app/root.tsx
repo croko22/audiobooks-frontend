@@ -47,7 +47,7 @@ import { Header } from "~/components/ui/Header";
 export default function App() {
   return (
     <NodeProvider>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans selection:bg-indigo-500/30">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans selection:bg-indigo-500/30 pb-20">
         <Header />
         <Outlet />
       </div>

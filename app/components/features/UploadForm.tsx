@@ -10,20 +10,22 @@ interface UploadFormProps {
 
 // Reverted parsing import
 export function UploadForm({ onUploadSuccess }: UploadFormProps) {
-  const { nodes } = useNodes();
+  const { nodes, selectedNodeUrl, setSelectedNodeUrl } = useNodes();
   const [file, setFile] = useState<File | null>(null);
-  const [selectedNodeUrl, setSelectedNodeUrl] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
   React.useEffect(() => {
-    const firstOnline = nodes.find(n => n.isOnline);
-    if (firstOnline && !selectedNodeUrl) {
+    // Si no hay nodo seleccionado, seleccionar el primero online o el primero disponible
+    if (!selectedNodeUrl) {
+      const firstOnline = nodes.find(n => n.isOnline);
+      if (firstOnline) {
         setSelectedNodeUrl(firstOnline.url);
-    } else if (nodes.length > 0 && !selectedNodeUrl) {
+      } else if (nodes.length > 0) {
         setSelectedNodeUrl(nodes[0].url);
+      }
     }
-  }, [nodes]);
+  }, [nodes, selectedNodeUrl, setSelectedNodeUrl]);
 
   const addLog = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
@@ -86,8 +88,8 @@ export function UploadForm({ onUploadSuccess }: UploadFormProps) {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Target Fog Node</label>
             <select 
                 className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 outline-hidden"
-                value={selectedNodeUrl}
-                onChange={(e) => setSelectedNodeUrl(e.target.value)}
+                value={selectedNodeUrl || ""}
+                onChange={(e) => setSelectedNodeUrl(e.target.value || null)}
                 disabled={isProcessing}
             >
                 <option value="" disabled>Select a node...</option>
